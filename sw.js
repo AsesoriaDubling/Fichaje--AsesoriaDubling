@@ -1,6 +1,6 @@
 // Service worker: permite abrir la app y fichar sin conexión.
 // Al cambiar cualquier archivo de la app, sube el número de versión.
-const CACHE = 'fichaje-dubling-v2.1';
+const CACHE = 'fichaje-dubling-v2.3';
 const ARCHIVOS = ['./', './index.html', './supabase.js', './xlsx.mini.min.js', './manifest.json', './icono.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
@@ -17,3 +17,4 @@ self.addEventListener('fetch', e => {
   }
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
+ 
