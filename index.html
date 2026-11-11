@@ -397,9 +397,13 @@ const SUPABASE_URL = 'https://fdipleqtoumnurnmehab.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_lrybIpfsV-4zJfcpJBDLVg_B3wS21LA';
 // =====================================================================
 
-const VERSION = '2.1';
+const VERSION = '2.3';
 const TZ = 'Europe/Madrid';
 const hashInicial = location.hash;   // para detectar invitación / recuperación
+// Enlaces de invitación y recuperación con token_hash: el token solo se canjea al pulsar
+// el botón, así los antivirus del correo que "abren" los enlaces no lo gastan.
+const qsInicial = new URLSearchParams(location.search);
+const tokenEnlace = qsInicial.get('token_hash') ? { token_hash: qsInicial.get('token_hash'), type: qsInicial.get('type') || 'recovery' } : null;
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, detectSessionInUrl: true } });
 const $ = id => document.getElementById(id);
 let yo = null, perfil = null, tipos = [], empresas = [], personas = [], estadoActual = {};
@@ -470,7 +474,13 @@ function totales(lista) {
 
 // ---------------- sesión ----------------
 async function arrancar() {
-  if (/type=(invite|recovery|signup)/.test(hashInicial)) { ver('vClave'); return; }
+  if (tokenEnlace || /type=(invite|recovery|signup)/.test(hashInicial)) { ver('vClave'); return; }
+  if (/error_code=otp_expired|error=access_denied/.test(hashInicial)) {
+    history.replaceState(null, '', location.pathname);
+    ver('vLogin');
+    $('lMsg').textContent = 'El enlace del correo ha caducado o ya se usó. Escribe tu correo arriba y pulsa «He olvidado mi contraseña» para recibir uno nuevo (usa siempre el último correo recibido).';
+    return;
+  }
   const { data } = await db.auth.getSession();
   if (!data.session) { ver('vLogin'); return; }
   yo = data.session.user;
@@ -508,6 +518,10 @@ $('bGuardarClave').onclick = async () => {
   const a = $('cClave1').value, b = $('cClave2').value;
   if (a.length < 10) { $('cMsg').textContent = 'Mínimo 10 caracteres.'; return; }
   if (a !== b) { $('cMsg').textContent = 'Las contraseñas no coinciden.'; return; }
+  if (tokenEnlace) {
+    const { error: eTok } = await db.auth.verifyOtp({ token_hash: tokenEnlace.token_hash, type: tokenEnlace.type });
+    if (eTok) { $('cMsg').textContent = 'El enlace ha caducado o ya se usó. Vuelve a la pantalla de acceso y pulsa «He olvidado mi contraseña».'; return; }
+  }
   const { error } = await db.auth.updateUser({ password: a });
   if (error) { $('cMsg').textContent = 'Error: ' + error.message; return; }
   try { await rpc('marcar_clave_cambiada'); } catch (e) {}
@@ -754,7 +768,7 @@ async function cargarPersonas() {
   personas = data || [];
   return personas;
 }
-const equipo = () => personas.filter(p => p.id !== perfil.id && (perfil.rol === 'admin' || p.responsable_id === perfil.id));
+const equipo = () => personas.filter(p => p.id !== perfil.id && ['responsable', 'admin'].includes(perfil.rol));   // responsables de toda la plantilla
 async function cargarEquipo() {
   await cargarPersonas();
   $('pPersona').innerHTML = equipo().filter(p => p.ficha).map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('');
